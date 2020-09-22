@@ -1,0 +1,67 @@
+select aa.stock_id, aa.close, bb."20_avg"
+from (
+    select stock_id, close from stock_price where date = '2020-07-13'
+) aa
+left join (
+--А絬基 5 > 20 > 60
+    select a.stock_id, b."20_avg"
+    from (
+        select stock_id, sum(close)/5 as "5_avg", count(*) as "5_c" from stock_price where date >= '2020-07-13' group by 1
+    ) a
+    left join (
+        select stock_id, sum(close)/20 as "20_avg", count(*) as "20_c" from stock_price where date >= '2020-06-18' group by 1
+    ) b
+    on a.stock_id = b.stock_id
+    left join (
+        select stock_id, sum(close)/60 as "60_avg", count(*) as "60_c" from stock_price where date >= '2020-04-22' group by 1
+    ) c
+    on a.stock_id = c.stock_id
+    where "5_c" = 5
+    and "20_c" = 20
+    and "60_c" = 60
+    and "5_avg" > "20_avg"
+    and "20_avg" > "60_avg"
+) bb
+on aa.stock_id = bb.stock_id
+left join (
+--碭る糤常タ
+    select a.stock_id
+    from (
+        --select stock_id, revenue_month, sum(revenue) over(partition by stock_id order by date asc) as "Y20_rev" --る仓璸
+	    select stock_id, revenue_month, revenue --虫る璸
+        from stock_mom_revenue
+        where revenue_year = '2020'
+    ) a
+    left join (
+        --select stock_id, revenue_month, sum(revenue) over(partition by stock_id order by date asc) as "Y19_rev"
+	    select stock_id, revenue_month, revenue
+        from stock_mom_revenue
+        where revenue_year = '2019'
+    ) b
+    on a.stock_id = b.stock_id
+    and a.revenue_month = b.revenue_month
+    --where a."Y20_rev" - b."Y19_rev" > 0
+    where a.revenue - b.revenue > 0
+    group by 1
+    having count(*) = 6
+) cc
+on aa.stock_id = cc.stock_id
+-- 1る┮ΤユらΘユ秖常禬筁1000眎
+join (
+    select distinct stock_id from stock_price where date >= '2020-06-13' and cast("Trading_Volume" as integer)/1000 < 1000
+) dd
+on aa.stock_id = dd.stock_id
+-- 磕戈ㄏノ瞯 < 10%
+left join (
+select stock_id
+	,"MarginPurchaseTodayBalance"
+	,"MarginPurchaseLimit"
+from stock_securities
+where date = '2020-07-13'
+and "MarginPurchaseLimit" <> 'nan'
+group by 1,2,3
+having (case when "MarginPurchaseTodayBalance" = 'nan' then '0' else "MarginPurchaseTodayBalance" end)::numeric 
+	/ (case when "MarginPurchaseLimit"::numeric = 0 then 100000000 else "MarginPurchaseLimit"::numeric end) < 0.1
+) ee
+on aa.stock_id = ee.stock_id
+where (aa.close - bb."20_avg")/bb."20_avg" between 0 and 0.02  -- Μ絃基籔20らА基畉禯2%ず

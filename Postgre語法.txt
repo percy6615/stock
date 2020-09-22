@@ -1,0 +1,16 @@
+--跨資料庫存取 DBLINK
+insert into public.stock_price_20200717
+select * from dblink('dbname=restore user=postgres password=postgres'
+					 ,'select distinct date, stock_id, "Trading_Volume", "Trading_money"
+					 ,open, max, min, close, spread, "Trading_turnover"
+					 from public.stock_price') as t
+( date text ,
+    stock_id text,
+    "Trading_Volume" bigint,
+    "Trading_money" bigint,
+    open double precision,
+    max double precision,
+    min double precision,
+    close double precision,
+    spread double precision,
+    "Trading_turnover" bigint)

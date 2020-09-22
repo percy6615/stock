@@ -1,0 +1,60 @@
+﻿select a.*
+from (
+select distinct stock_id, stock_name from stock_info
+) a
+-- 去年eps超過1
+join (
+select stock_id
+from stock_fin_stat
+where date between '2019-01-01' and '2019-12-31'
+group by 1
+having sum(value) > 1
+) b
+on a.stock_id = b.stock_id
+-- 本益比<25 & 股價淨值比<1
+join (
+select distinct stock_id from stock_per_pbr where "PER" < '25' and "PBR" < '1' and date = '2020-05-15'
+) c
+on a.stock_id = c.stock_id
+-- 股價 < 近5年平均現金股利的20倍
+join (
+	select x.stock_id
+	from (
+        select stock_id, sum(cast(case when "CashEarningsDistribution" in('nan','None') then '0' 
+			                           else "CashEarningsDistribution" end as decimal(5,3)))/5 as avg_dividend
+		from stock_dividend
+		where date between '2015-06-30' and '2020-06-30'
+	    group by 1
+	) x
+	join ( select distinct stock_id, close
+		  from stock_price
+		  where date = '2020-05-15'
+		 ) y
+	on x.stock_id = y.stock_id
+	where x.avg_dividend *30 > y.close
+) d
+on a.stock_id = d.stock_id
+-- 預估殖利率 7%~15%
+join (
+select stock_id from stock_per_pbr where date = '2020-05-15' and cast(dividend_yield as decimal(4,2)) between 7.00 and 15.00
+) e
+on a.stock_id = e.stock_id
+-- 近1個月所有交易日成交量都超過1000張
+left join (
+    select distinct stock_id from stock_price where date >= '2020-04-01' and cast("Trading_Volume" as integer)/1000 < 1000
+) f
+on a.stock_id = f.stock_id
+-- 融資使用率 < 10%
+left join (
+select stock_id
+	,"MarginPurchaseTodayBalance"
+	,"MarginPurchaseLimit"
+from stock_securities
+where date = '2020-05-18'
+and "MarginPurchaseLimit" <> 'nan'
+group by 1,2,3
+having (case when "MarginPurchaseTodayBalance" = 'nan' then '0' else "MarginPurchaseTodayBalance" end)::numeric / "MarginPurchaseLimit"::numeric < 0.1
+) g
+on a.stock_id = g.stock_id
+where f.stock_id is null
+																	  
